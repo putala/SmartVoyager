@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
     StyleSheet, Text, View, ScrollView, TouchableOpacity,
-    ActivityIndicator, SafeAreaView, Alert, LayoutAnimation, Platform, UIManager, Linking,
+    ActivityIndicator, Alert, LayoutAnimation, Platform, UIManager, Linking,
 } from 'react-native';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import MapView from 'react-native-maps';
 import {
     Sparkles, Trash2, CheckCircle2, MapPin, Heart, Pencil, Clock, ExternalLink,

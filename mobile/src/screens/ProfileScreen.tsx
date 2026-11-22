@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import {
     StyleSheet, Text, View, ScrollView, TextInput,
-    TouchableOpacity, ActivityIndicator, SafeAreaView, Alert,
+    TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import { User, Lock, Save, ChevronRight, Sparkles, Settings, Trash2 } from 'lucide-react-native';
 import { userService } from '../api/userService';
 import { useAuthStore } from '../store/authStore';

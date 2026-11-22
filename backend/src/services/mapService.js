@@ -35,6 +35,9 @@ const safeUrl = (value) => {
     }
 };
 
+// Ogranicza wyniki Nominatim do prostokąta trasy
+const viewboxParam = (box) => (box ? `&viewbox=${box.west},${box.north},${box.east},${box.south}&bounded=1` : '');
+
 /**
  * Współrzędne adresu; null, gdy nie znaleziono
  */
@@ -49,9 +52,8 @@ exports.geocode = async (address) => {
  * Zwraca prawdziwe położenie oraz dane z bazy (godziny otwarcia, strona www), gdy są dostępne.
  */
 exports.findPlace = async (query, box) => {
-    const viewbox = box ? `&viewbox=${box.west},${box.north},${box.east},${box.south}&bounded=1` : '';
     const data = await nominatim(
-        `/search?format=jsonv2&limit=1&extratags=1&accept-language=pl${viewbox}&q=${encodeURIComponent(query)}`
+        `/search?format=jsonv2&limit=1&extratags=1&accept-language=pl${viewboxParam(box)}&q=${encodeURIComponent(query)}`
     );
     const hit = data?.[0];
     return hit ? toPlace(hit) : null;
@@ -69,9 +71,8 @@ const toPlace = (hit) => ({
  * Prostokąt trasy odcina miejscowości o tej samej nazwie w innych częściach kraju.
  */
 exports.attractionsInTown = async (town, category, box) => {
-    const viewbox = box ? `&viewbox=${box.west},${box.north},${box.east},${box.south}&bounded=1` : '';
     const data = await nominatim(
-        `/search?format=jsonv2&limit=6&extratags=1&accept-language=pl${viewbox}&q=${encodeURIComponent(`${category} in ${town}`)}`
+        `/search?format=jsonv2&limit=6&extratags=1&accept-language=pl${viewboxParam(box)}&q=${encodeURIComponent(`${category} in ${town}`)}`
     );
     return (data || [])
         .filter(hit => hit.name)
@@ -109,8 +110,8 @@ exports.townsAlongRoad = async (line, count) => {
         const data = await nominatim(
             `/reverse?format=json&zoom=10&accept-language=pl&lat=${point.lat}&lon=${point.lng}`
         );
-        const a = data?.address || {};
-        const name = a.city || a.town || a.village || a.municipality || a.county;
+        const address = data?.address || {};
+        const name = address.city || address.town || address.village || address.municipality || address.county;
         if (name && !towns.includes(name)) towns.push(name);
     }
     return towns;

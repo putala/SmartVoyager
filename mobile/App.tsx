@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { useAuthStore } from './src/store/authStore';
 import LoginScreen from './src/screens/LoginScreen';
@@ -73,8 +74,10 @@ function AppNavigation() {
 
 export default function App() {
     return (
-        <ThemeProvider>
-            <AppNavigation />
-        </ThemeProvider>
+        <SafeAreaProvider>
+            <ThemeProvider>
+                <AppNavigation />
+            </ThemeProvider>
+        </SafeAreaProvider>
     );
 }

@@ -1,4 +1,6 @@
-const errorHandler = (err, req, res, next) => {
+// Express rozpoznaje obsługę błędów po czterech parametrach, więc `_next` musi zostać
+// noinspection JSUnusedLocalSymbols
+const errorHandler = (err, req, res, _next) => {
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
 
     // Obiekt z pełnym kontekstem błędu (wymagany przez Issue)

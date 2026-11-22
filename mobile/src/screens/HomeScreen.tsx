@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     StyleSheet,
     Text,
@@ -6,7 +6,6 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    SafeAreaView,
     Alert,
     LayoutAnimation,
     Platform,
@@ -28,8 +27,9 @@ import { useAuthStore } from '../store/authStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRefreshOnForeground } from '../hooks/useRefreshOnForeground';
 import { BrandMark } from '../components/ui/BrandMark';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import { useTheme } from '../context/ThemeContext';
-import { spacing, radius } from '../theme/tokens';
+import { spacing, radius } from '../theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);

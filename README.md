@@ -90,6 +90,17 @@ Flaga `--offline` pomija logowanie do Expo. W Expo Go zeskanuj kod QR. Wygląd a
 6. Każda propozycja spoza listy jest szukana w OpenStreetMap. Znaleziona dostaje prawdziwe współrzędne, godziny otwarcia i stronę www oraz znacznik `verified`.
 7. Serwer wybiera punkty równo rozłożone wzdłuż drogi, z pierwszeństwem dla potwierdzonych, układa je od startu do celu i zapisuje tyle punktów, ile ustawiono na suwaku.
 
+Kod jest podzielony według odpowiedzialności:
+
+* `services/aiService.js` — przebieg generowania i zapytanie do Groq,
+* `services/mapService.js` — komunikacja z Nominatim i OSRM oraz geometria trasy,
+* `services/planning/attractionCatalog.js` — katalog atrakcji przy drodze,
+* `services/planning/tripPrompt.js` — treść polecenia dla modelu,
+* `services/planning/placeVerifier.js` — wyszukiwanie propozycji w OpenStreetMap,
+* `services/planning/stopSelector.js` — wybór punktów równo rozłożonych na trasie.
+
+Moduły w `planning/` poza wyszukiwaniem w mapie to czyste funkcje, więc można je testować bez sieci i bez klucza Groq.
+
 Suwak zasięgu eksploracji zmienia dopuszczalne zboczenie z drogi: około 5 km przy wartości 0 i około 30 km przy wartości 10. Pierwszy punkt to start, ostatni to cel. Usunięcie wycieczki kasuje też jej punkty.
 
 Godziny otwarcia i strona www pojawiają się przy punkcie tylko wtedy, gdy są wpisane w OpenStreetMap. Dla mniejszych obiektów często ich brakuje.

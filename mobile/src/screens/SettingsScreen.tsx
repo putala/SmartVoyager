@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Sun, Moon, Monitor, Palette, LayoutGrid, Check,
@@ -28,7 +28,7 @@ const DENSITY_LABELS: Record<Density, string> = {
 };
 
 export default function SettingsScreen({ navigation }: any) {
-    const { colors, common, spacing, radius, settings, setColorMode, setAccent, setDensity } = useTheme();
+    const { colors, common, spacing, settings, setColorMode, setAccent, setDensity } = useTheme();
 
     const optionStyle = (selected: boolean) => ({
         backgroundColor: selected ? colors.accentMuted : colors.surface,

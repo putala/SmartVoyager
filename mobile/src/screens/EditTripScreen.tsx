@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     StyleSheet, Text, View, TextInput, ScrollView,
-    TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
+    TouchableOpacity, ActivityIndicator, Alert,
     KeyboardAvoidingView, Platform,
 } from 'react-native';
 import {
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native';
 import { tripsService } from '../api/tripsService';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import { useTheme } from '../context/ThemeContext';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 

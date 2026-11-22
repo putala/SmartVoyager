@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     StyleSheet, Text, View, ScrollView, TouchableOpacity,
-    SafeAreaView, ActivityIndicator, Alert, TextInput,
+    ActivityIndicator, Alert, TextInput,
 } from 'react-native';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import {
     Sparkles, Zap, Building2, LibraryBig,
     Palmtree, Utensils, Compass, Map, Globe2, CheckCircle2,

@@ -6,7 +6,7 @@ const {
     updateUserRole,
     getAllUsers,
     updateProfile,      // Musisz to zaimportować z kontrolera
-    changePassword,     // Musisz to zaimportować z kontrolera
+    changePassword,
     exportMyData,
     deleteMyAccount
 } = require('../controllers/userController');

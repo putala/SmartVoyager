@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import {
     StyleSheet, Text, View, TextInput, ScrollView,
-    TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
+    TouchableOpacity, ActivityIndicator, Alert,
     KeyboardAvoidingView, Platform,
 } from 'react-native';
 import {
     Send, Sparkles, Minus, Plus,
-    Calendar as CalendarIcon, MapPin, Flag, MessageSquare, Activity, Route, Clock, Banknote,
+    Calendar as CalendarIcon, MapPin, Flag, MessageSquare, Banknote,
 } from 'lucide-react-native';
 import api from '../api/axiosInstance';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { SafeAreaView } from '../components/ui/SafeAreaView';
 import { useTheme } from '../context/ThemeContext';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
