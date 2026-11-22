@@ -5,8 +5,7 @@ import axios from 'axios';
 // });
 
 const api = axios.create({
-    // Zmieniamy localhost na adres z Rendera
-    baseURL: 'https://taw-mateusz-putala-mikolaj-czernik.onrender.com/api',
+    baseURL: 'http://localhost:5000/api',
 });
 
 // Interceptor żądań: Dodaje token do każdego zapytania
