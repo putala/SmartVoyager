@@ -6,8 +6,12 @@ import {
 import { SafeAreaView } from '../components/ui/SafeAreaView';
 import MapView from 'react-native-maps';
 import {
-    Sparkles, Trash2, CheckCircle2, MapPin, Heart, Pencil, Clock, ExternalLink,
+    Sparkles, Trash2, CheckCircle2, MapPin, Heart, Pencil, ExternalLink, Navigation,
 } from 'lucide-react-native';
+import { ExpandableDescription } from '../components/trips/ExpandableDescription';
+import { OpeningHours } from '../components/trips/OpeningHours';
+import { PlaceSourceBadge } from '../components/trips/PlaceSourceBadge';
+import { buildGoogleMapsRoute } from '../utils/navigation';
 import { useRefreshOnForeground } from '../hooks/useRefreshOnForeground';
 import { tripsService } from '../api/tripsService';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
@@ -77,6 +81,20 @@ export default function TripDetailsScreen({ route, navigation }: any) {
             }, 800);
         }
         toggleWaypointSpeech(wp, wp._id || String(index));
+    };
+
+    const handleNavigate = async () => {
+        const route = buildGoogleMapsRoute(trip?.waypoints || []);
+        if (!route) return;
+        try {
+            await Linking.openURL(route.url);
+        } catch {
+            Alert.alert('Błąd', 'Nie udało się otworzyć Google Maps.');
+            return;
+        }
+        if (route.omittedStops > 0) {
+            Alert.alert('Nawigacja', `Google Maps przyjmuje do 9 przystanków. Pominięto ${route.omittedStops} ostatnich, odwiedzone punkty nie są uwzględniane.`);
+        }
     };
 
     const toggleDescription = (wpId: string) => {
@@ -187,6 +205,12 @@ export default function TripDetailsScreen({ route, navigation }: any) {
                 </View>
 
                 <View style={{ padding: spacing.lg }}>
+                    {trip.waypoints?.length >= 2 && (
+                        <TouchableOpacity style={[common.secondaryBtn, styles.navigateBtn]} onPress={handleNavigate}>
+                            <Navigation size={16} color={colors.textSecondary} />
+                            <Text style={common.secondaryBtnText}>Prowadź w Google Maps</Text>
+                        </TouchableOpacity>
+                    )}
                     <View style={styles.sectionRow}>
                         <Text style={common.sectionTitle}>Punkty trasy</Text>
                         <TouchableOpacity onPress={handleGenerateAI} disabled={isGenerating} style={styles.genLink}>
@@ -253,6 +277,7 @@ export default function TripDetailsScreen({ route, navigation }: any) {
                                             <Trash2 size={16} color={colors.error} />
                                         </TouchableOpacity>
                                     </View>
+                                    <PlaceSourceBadge verified={wp.verified} />
                                     {wp.address ? (
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                                             <MapPin size={11} color={colors.textMuted} />
@@ -261,14 +286,7 @@ export default function TripDetailsScreen({ route, navigation }: any) {
                                             </Text>
                                         </View>
                                     ) : null}
-                                    {wp.openingHours ? (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                            <Clock size={11} color={colors.textMuted} />
-                                            <Text style={{ fontSize: 12, color: colors.textMuted, flex: 1 }} numberOfLines={2}>
-                                                {wp.openingHours}
-                                            </Text>
-                                        </View>
-                                    ) : null}
+                                    {wp.openingHours ? <OpeningHours value={wp.openingHours} /> : null}
                                     {wp.website ? (
                                         <TouchableOpacity
                                             onPress={() => Linking.openURL(wp.website)}
@@ -281,12 +299,11 @@ export default function TripDetailsScreen({ route, navigation }: any) {
                                         </TouchableOpacity>
                                     ) : null}
                                     {wp.description ? (
-                                        <Text
-                                            style={{ fontSize: 13, color: colors.textSecondary, marginTop: 6, lineHeight: 18 }}
-                                            numberOfLines={isExpanded ? undefined : 2}
-                                        >
-                                            {wp.description}
-                                        </Text>
+                                        <ExpandableDescription
+                                            text={wp.description}
+                                            expanded={isExpanded}
+                                            onToggle={() => toggleDescription(wp._id)}
+                                        />
                                     ) : null}
                                 </View>
                             </TouchableOpacity>
@@ -321,6 +338,7 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     genLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    navigateBtn: { justifyContent: 'center', gap: 8, marginBottom: 16 },
     wpCard: {
         flexDirection: 'row',
         gap: 8,

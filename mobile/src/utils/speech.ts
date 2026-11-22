@@ -1,4 +1,5 @@
 import * as Speech from 'expo-speech';
+import { describeOpeningHoursForSpeech } from './openingHours';
 
 export interface SpeakableWaypoint {
     name?: string;
@@ -15,7 +16,8 @@ function buildWaypointSpeechText(wp: SpeakableWaypoint): string | null {
     const parts: string[] = [];
     if (wp.name?.trim()) parts.push(wp.name.trim());
     if (wp.address?.trim()) parts.push(wp.address.trim());
-    if (wp.openingHours?.trim()) parts.push(`Godziny otwarcia: ${wp.openingHours.trim()}`);
+    const spokenHours = describeOpeningHoursForSpeech(wp.openingHours);
+    if (spokenHours) parts.push(`Godziny otwarcia: ${spokenHours}`);
     if (wp.description?.trim()) parts.push(wp.description.trim());
     if (parts.length === 0) return null;
     return parts.join('. ');

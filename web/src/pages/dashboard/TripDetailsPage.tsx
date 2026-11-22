@@ -14,9 +14,13 @@ import {
     AlertCircle,
     Pencil,
     ArrowLeft,
-    Clock,
     ExternalLink,
+    Navigation,
 } from 'lucide-react';
+import { ExpandableDescription } from '../../components/trips/ExpandableDescription';
+import { OpeningHours } from '../../components/trips/OpeningHours';
+import { PlaceSourceBadge } from '../../components/trips/PlaceSourceBadge';
+import { buildGoogleMapsRoute } from '../../utils/navigation';
 
 export const TripDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -99,6 +103,15 @@ export const TripDetailsPage = () => {
         }
     };
 
+    const handleNavigate = () => {
+        const route = buildGoogleMapsRoute(trip?.waypoints || []);
+        if (!route) return;
+        window.open(route.url, '_blank', 'noopener,noreferrer');
+        if (route.omittedStops > 0) {
+            toast(`Google Maps przyjmuje do 9 przystanków. Pominięto ${route.omittedStops} ostatnich, odwiedzone punkty nie są uwzględniane.`, 'info');
+        }
+    };
+
     const handleWaypointClick = (wp: any) => {
         const lat = wp.location?.lat ?? wp.lat;
         const lng = wp.location?.lng ?? wp.lng;
@@ -156,7 +169,13 @@ export const TripDetailsPage = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {trip.waypoints?.length >= 2 && (
+                        <button onClick={handleNavigate} className="btn-secondary" title="Otwórz trasę w Google Maps">
+                            <Navigation size={16} />
+                            Prowadź
+                        </button>
+                    )}
                     <Link
                         to={`/dashboard/edit-trip/${id}`}
                         className="btn-secondary"
@@ -225,18 +244,16 @@ export const TripDetailsPage = () => {
                                                 <Trash2 size={14} />
                                             </button>
                                         </div>
+                                        <div className="mt-1">
+                                            <PlaceSourceBadge verified={wp.verified} />
+                                        </div>
                                         {wp.address && (
                                             <p className="text-xs text-muted mt-1 flex items-center gap-1">
                                                 <MapPin size={11} />
                                                 {wp.address}
                                             </p>
                                         )}
-                                        {wp.openingHours && (
-                                            <p className="text-xs text-muted mt-1 flex items-center gap-1">
-                                                <Clock size={11} />
-                                                {wp.openingHours}
-                                            </p>
-                                        )}
+                                        {wp.openingHours && <OpeningHours value={wp.openingHours} />}
                                         {wp.website && (
                                             <a
                                                 href={wp.website}
@@ -249,11 +266,7 @@ export const TripDetailsPage = () => {
                                                 Strona miejsca
                                             </a>
                                         )}
-                                        {wp.description && (
-                                            <p className="text-xs text-muted mt-2 leading-relaxed">
-                                                {wp.description}
-                                            </p>
-                                        )}
+                                        {wp.description && <ExpandableDescription text={wp.description} />}
                                     </div>
                                 </div>
                             </div>

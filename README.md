@@ -97,13 +97,44 @@ Kod jest podzielony według odpowiedzialności:
 * `services/planning/attractionCatalog.js` — katalog atrakcji przy drodze,
 * `services/planning/tripPrompt.js` — treść polecenia dla modelu,
 * `services/planning/placeVerifier.js` — wyszukiwanie propozycji w OpenStreetMap,
-* `services/planning/stopSelector.js` — wybór punktów równo rozłożonych na trasie.
+* `services/planning/stopSelector.js` — wybór punktów równo rozłożonych na trasie,
+* `services/planning/tripSettings.js` — przeliczenie suwaków wycieczki na liczbę punktów i zasięg od drogi,
+* `services/planning/proposals.js` — odczyt odpowiedzi modelu oraz przypięcie startu i celu.
 
 Moduły w `planning/` poza wyszukiwaniem w mapie to czyste funkcje, więc można je testować bez sieci i bez klucza Groq.
 
 Suwak zasięgu eksploracji zmienia dopuszczalne zboczenie z drogi: około 5 km przy wartości 0 i około 30 km przy wartości 10. Pierwszy punkt to start, ostatni to cel. Usunięcie wycieczki kasuje też jej punkty.
 
 Godziny otwarcia i strona www pojawiają się przy punkcie tylko wtedy, gdy są wpisane w OpenStreetMap. Dla mniejszych obiektów często ich brakuje.
+
+## Szczegóły wycieczki
+
+Karta punktu trasy w webie i w aplikacji mobilnej pokazuje:
+
+* znacznik „Potwierdzone w mapach” (miejsce znalezione w OpenStreetMap) albo „Propozycja AI”,
+* godziny otwarcia po polsku, np. „pon. nieczynne; wt.–pt. 12:00–21:00”, ze stanem „Otwarte teraz” / „Zamknięte”. Lektor czyta je pełnymi słowami. Nietypowe zapisy (np. z miesiącami) są pokazywane w oryginale, bez stanu otwarcia,
+* link do strony miejsca,
+* opis w stylu przewodnika: czym jest miejsce, historia, co zobaczyć, ciekawostka, czas zwiedzania i wstęp. Przy krótkich trasach opis ma 8–10 zdań, przy długich 5–6, żeby odpowiedź AI zmieściła się w limicie tokenów. Karta pokazuje pierwsze 3 linie, a przycisk „Pokaż więcej” rozwija całość. W aplikacji mobilnej opis rozwija też przytrzymanie karty.
+
+Przycisk „Prowadź” otwiera w Google Maps trasę samochodową od startu do celu przez punkty jeszcze nieodwiedzone. Google Maps przyjmuje do 9 przystanków; przy większej liczbie aplikacja informuje, ile pominięto.
+
+Logika godzin otwarcia i nawigacji jest w `utils/openingHours.ts` i `utils/navigation.ts`, w tej samej postaci w `web/src` i `mobile/src`.
+
+## Testy
+
+Backend ma przygotowane środowisko Jest dla zakresu „Generowanie punktów trasy na podstawie ustawień wycieczki”:
+
+```powershell
+cd backend
+npm test               # uruchomienie testów
+npm run test:coverage  # z raportem pokrycia dla aiService.js i services/planning
+```
+
+Testy umieszcza się w `backend/tests` jako pliki `*.test.js`. Działają bez sieci i bez klucza Groq dzięki pomocnikom:
+
+* `tests/helpers/fakeGroqClient.js` — udawany model podawany przez `aiService.setClient()`; zwraca zadane punkty, niepoprawny JSON albo błąd i zapamiętuje wysłany prompt,
+* `tests/helpers/mapServiceStub.js` — zamiennik `mapService` bez zapytań do OpenStreetMap (przez `jest.mock`), z prawdziwą geometrią trasy,
+* `tests/helpers/tripFixtures.js` — przykładowa wycieczka Kraków–Wrocław, użytkownik, droga i odpowiedź modelu.
 
 Generowanie trwa zwykle 30–60 sekund, bo OpenStreetMap pozwala na jedno zapytanie na sekundę. Darmowe konto Groq ma limit 8000 tokenów na minutę. Przy dużej liczbie przystanków kolejne generowanie trzeba powtórzyć po krótkiej przerwie.
 
