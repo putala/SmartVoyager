@@ -8,8 +8,6 @@ import {
     ActivityIndicator,
     Alert,
     LayoutAnimation,
-    Platform,
-    UIManager,
 } from 'react-native';
 import {
     Compass,
@@ -30,10 +28,6 @@ import { BrandMark } from '../components/ui/BrandMark';
 import { SafeAreaView } from '../components/ui/SafeAreaView';
 import { useTheme } from '../context/ThemeContext';
 import { spacing, radius } from '../theme';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface Trip {
     _id: string;

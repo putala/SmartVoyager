@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
     StyleSheet, Text, View, ScrollView, TouchableOpacity,
-    ActivityIndicator, Alert, LayoutAnimation, Platform, UIManager, Linking,
+    ActivityIndicator, Alert, LayoutAnimation, Linking,
 } from 'react-native';
 import { SafeAreaView } from '../components/ui/SafeAreaView';
 import MapView from 'react-native-maps';
@@ -19,10 +19,6 @@ import { TripMap } from '../components/trips/TripMap';
 import { useTheme } from '../context/ThemeContext';
 import { toggleWaypointSpeech, stopSpeech } from '../utils/speech';
 import { useFocusEffect } from '@react-navigation/native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export default function TripDetailsScreen({ route, navigation }: any) {
     const { id } = route.params;
