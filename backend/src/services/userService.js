@@ -38,6 +38,38 @@ exports.changeUserPassword = async (userId, oldPassword, newPassword) => {
 };
 
 /**
+ * Eksport wszystkich danych użytkownika (konto, wycieczki, punkty trasy)
+ */
+exports.exportUserData = async (userId) => {
+    const user = await User.findById(userId).select('-password').lean();
+    if (!user) throw new Error("Nie znaleziono użytkownika");
+
+    const trips = await Trip.find({ user: userId }).lean();
+    const waypoints = await Waypoint.find({ trip: { $in: trips.map(t => t._id) } }).sort('order_index').lean();
+
+    return {
+        exportedAt: new Date().toISOString(),
+        user,
+        trips: trips.map(trip => ({
+            ...trip,
+            waypoints: waypoints.filter(wp => wp.trip.toString() === trip._id.toString()),
+        })),
+    };
+};
+
+/**
+ * Usunięcie własnego konta po potwierdzeniu hasłem
+ */
+exports.deleteOwnAccount = async (userId, password) => {
+    const user = await User.findById(userId).select('+password');
+    if (!user) throw new Error("Nie znaleziono użytkownika");
+    if (!password || !(await user.matchPassword(password))) {
+        throw new Error("Nieprawidłowe hasło");
+    }
+    await exports.deleteUserCompletely(userId);
+};
+
+/**
  * Pobieranie ogólnych statystyk systemu (Liczba użytkowników, wycieczek)
  */
 exports.getGlobalStats = async () => {

@@ -1,4 +1,5 @@
 const Groq = require("groq-sdk");
+const mapService = require('./mapService');
 
 // Ta zmienna będzie przechowywać klienta
 let client = null;
@@ -15,85 +16,96 @@ const getClient = () => {
     return client;
 };
 
-// Współrzędne miejsca z OpenStreetMap (Nominatim); null, gdy nie znaleziono
-const geocode = async (address) => {
-    try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'SmartVoyager/1.0' } });
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (!data[0]) return null;
-        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-    } catch {
-        return null;
+// Model podaje nazwy w formie „Muzeum Regionalne w Myślenicach” albo z dopiskami („Zamek X – dziedziniec”),
+// a OSM zna „Muzeum Regionalne” w miejscowości „Myślenice”. Odmienionej miejscowości Nominatim nie rozpoznaje,
+// więc drugie zapytanie to sama nazwa obiektu + miejscowość z adresu (w mianowniku)
+const verifyInOsm = async (wp, box) => {
+    const town = (wp.address?.split(',').map(part => part.trim()).filter(Boolean).pop() || '')
+        .replace(/\s*\(.*$/, '')
+        .trim();
+    const strippedName = wp.name
+        .split(/\s[–—-]\s|\s*\(/)[0]
+        .replace(/\s+(w|we|na|pod|nad|koło|przy|k\.)\s+\p{Lu}.*$/u, '')
+        .replace(/\s+(pw\.|p\.w\.|pod wezwaniem)\s+/giu, ' ')
+        .trim();
+    // Jedno słowo („Muzeum”) pasowałoby do dowolnego muzeum w mieście
+    const shortName = strippedName.split(/\s+/).length >= 2 ? strippedName : wp.name;
+    const queries = [...new Set([
+        wp.address ? `${wp.name}, ${wp.address}` : wp.name,
+        town ? `${shortName}, ${town}` : shortName,
+    ])];
+
+    for (const query of queries) {
+        const place = await mapService.findPlace(query, box);
+        if (place) return place;
     }
+    return null;
 };
 
-// Przebieg drogi samochodowej z OSRM jako lista {lat, lng}; przy błędzie linia prosta
-const fetchRoadLine = async (start, end) => {
-    try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=simplified&geometries=geojson`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'SmartVoyager/1.0' } });
-        if (!res.ok) return [start, end];
-        const data = await res.json();
-        const coords = data.routes?.[0]?.geometry?.coordinates;
-        if (!coords || coords.length < 2) return [start, end];
-        return coords.map(([lng, lat]) => ({ lat, lng }));
-    } catch {
-        return [start, end];
-    }
+const normalizeName = (name) => (name || '').toLowerCase().replace(/[–—‑]/g, '-').replace(/\s+/g, ' ').trim();
+
+const OSM_TYPE_LABELS = {
+    museum: 'muzeum',
+    attraction: 'atrakcja',
+    castle: 'zamek/pałac',
+    gallery: 'galeria',
+    viewpoint: 'punkt widokowy',
+    monument: 'pomnik',
+    memorial: 'miejsce pamięci',
+    zoo: 'zoo',
+    theme_park: 'park rozrywki',
+    artwork: 'dzieło sztuki',
 };
 
-// Położenie punktu względem drogi: progress 0..1 to postęp wzdłuż trasy,
-// offsetKm to odległość od najbliższego miejsca na drodze
-const routePosition = (point, line) => {
-    const kmPerLat = 110.57;
-    const kmPerLng = 111.32 * Math.cos(point.lat * Math.PI / 180);
-    const toXY = (p) => ({ x: p.lng * kmPerLng, y: p.lat * kmPerLat });
-    const p = toXY(point);
+const CATALOG_CATEGORIES = ['attraction', 'museum'];
+const CATALOG_MAX_TOWNS = 8;
+const CATALOG_PER_TOWN = 3;
+const CATALOG_MAX_PLACES = 40;
 
-    let travelled = 0;
-    let best = { offsetKm: Infinity, alongKm: 0 };
-    for (let i = 0; i < line.length - 1; i++) {
-        const a = toXY(line[i]);
-        const b = toXY(line[i + 1]);
-        const ex = b.x - a.x;
-        const ey = b.y - a.y;
-        const segKm = Math.hypot(ex, ey);
-        const t = segKm === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * ex + (p.y - a.y) * ey) / (segKm * segKm)));
-        const offsetKm = Math.hypot(p.x - (a.x + t * ex), p.y - (a.y + t * ey));
-        if (offsetKm < best.offsetKm) best = { offsetKm, alongKm: travelled + t * segKm };
-        travelled += segKm;
-    }
-    return { progress: travelled === 0 ? 0 : best.alongKm / travelled, offsetKm: best.offsetKm };
-};
+// Pobiera z OSM atrakcje w miejscowościach pośrednich i zostawia tylko te przy drodze, w kolejności przejazdu
+const collectAttractions = async (roadLine, towns, tolerance) => {
+    const box = mapService.boundingBox(roadLine, tolerance);
+    const middleTowns = pickEvenly(towns.slice(1, -1), CATALOG_MAX_TOWNS);
+    const seen = new Set();
+    const places = [];
 
-// Kilka punktów z przebiegu drogi do podpowiedzi dla modelu
-const sampleLine = (line, count) => {
-    if (line.length <= count) return line;
-    return Array.from({ length: count }, (_, i) => line[Math.round(i * (line.length - 1) / (count - 1))]);
-};
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Nazwy miejscowości leżących na drodze (Nominatim pozwala na 1 zapytanie na sekundę)
-const townsAlongRoad = async (line, count) => {
-    const towns = [];
-    for (const point of sampleLine(line, count)) {
-        try {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&accept-language=pl&lat=${point.lat}&lon=${point.lng}`;
-            const res = await fetch(url, { headers: { 'User-Agent': 'SmartVoyager/1.0' } });
-            if (res.ok) {
-                const a = (await res.json()).address || {};
-                const name = a.city || a.town || a.village || a.municipality || a.county;
-                if (name && !towns.includes(name)) towns.push(name);
+    for (const town of middleTowns) {
+        const inTown = [];
+        for (const category of CATALOG_CATEGORIES) {
+            for (const place of await mapService.attractionsInTown(town, category, box)) {
+                const key = place.osmId || normalizeName(place.name);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const position = mapService.routePosition(place.location, roadLine);
+                if (position.progress > 0.02 && position.progress < 0.98 && position.offsetKm <= tolerance) {
+                    inTown.push({ ...place, progress: position.progress });
+                }
             }
-        } catch {
-            // pomijamy punkt, którego nie udało się nazwać
         }
-        await sleep(1100);
+        // Duże miasto nie może zdominować listy; najpierw obiekty z godzinami otwarcia lub stroną www
+        const richness = place => (place.openingHours ? 2 : 0) + (place.website ? 1 : 0) + (place.type === 'museum' ? 1 : 0);
+        places.push(...inTown.sort((a, b) => richness(b) - richness(a)).slice(0, CATALOG_PER_TOWN));
     }
-    return towns;
+
+    return pickEvenly(places.sort((a, b) => a.progress - b.progress), CATALOG_MAX_PLACES);
+};
+
+// Kara (w ułamku długości trasy) dla miejsca niepotwierdzonego w OSM: bierzemy je tylko,
+// gdy wypełnia lukę na trasie wyraźnie lepiej niż potwierdzone
+const UNVERIFIED_PENALTY = 0.05;
+
+// Wybiera `count` kandydatów najbliższych równo rozstawionym miejscom na trasie (progress 0..1)
+const pickAlongRoute = (candidates, count) => {
+    const pool = [...candidates];
+    const chosen = [];
+    for (let i = 0; i < count && pool.length > 0; i++) {
+        const target = (i + 0.5) / count;
+        const cost = c => Math.abs(c.progress - target) + (c.wp.verified ? 0 : UNVERIFIED_PENALTY);
+        const best = pool.reduce((a, b) => (cost(b) < cost(a) ? b : a));
+        chosen.push(best);
+        pool.splice(pool.indexOf(best), 1);
+    }
+    return chosen;
 };
 
 // Wybiera `count` elementów równomiernie rozłożonych na liście
@@ -104,12 +116,30 @@ const pickEvenly = (items, count) => {
 };
 
 const toPoint = (wp) => ({
-    ...wp,
+    name: wp.name,
+    address: wp.address,
+    description: wp.description,
     location: {
         lat: parseFloat(wp.location?.lat || wp.lat),
         lng: parseFloat(wp.location?.lng || wp.lng)
     }
 });
+
+const TRAVEL_STYLE_LABELS = {
+    avoidPaidAttractions: 'unikaj płatnych atrakcji',
+    onlyHiddenGems: 'preferuj mniej znane miejsca zamiast najpopularniejszych',
+    kidFriendly: 'miejsca odpowiednie dla dzieci',
+    disabilityAccess: 'miejsca dostępne dla osób z niepełnosprawnościami',
+    preferWalking: 'krótkie dojścia piesze od parkingu',
+};
+
+const describeTravelStyle = (preferences) => {
+    const style = preferences?.travelStyle || {};
+    const rules = Object.keys(TRAVEL_STYLE_LABELS).filter(key => style[key]).map(key => TRAVEL_STYLE_LABELS[key]);
+    const notes = preferences?.personalNotes?.trim();
+    if (notes) rules.push(`notatka użytkownika: ${notes}`);
+    return rules.length > 0 ? rules.join('; ') : 'brak';
+};
 
 exports.generateWaypoints = async (trip, user) => {
     try {
@@ -117,8 +147,8 @@ exports.generateWaypoints = async (trip, user) => {
         console.log(`[Groq AI] Generowanie trasy: ${trip.origin.address} -> ${trip.destination.address}`);
 
         const interests = user.preferences?.interests?.join(', ') || 'ogólne zwiedzanie';
+        const travelStyle = describeTravelStyle(user.preferences);
 
-        // DODANO: Destrukturyzacja z wartościami domyślnymi, aby uniknąć błędów przy braku pól
         const {
             intensity = 5,
             numberOfPoints = 10,
@@ -127,26 +157,35 @@ exports.generateWaypoints = async (trip, user) => {
 
         const budget = trip.budget > 0 ? `${trip.budget} PLN` : 'budżet ekonomiczny';
 
-        // DODANO: Definicja zmiennej specialRequests, której brakowało!
         const specialRequests = trip.description
             ? `DODATKOWE WYTYCZNE UŻYTKOWNIKA (PRIORYTET): ${trip.description}`
             : "Brak dodatkowych życzeń.";
 
+        // 1. Mapa: współrzędne startu i celu, przebieg drogi i miejscowości po drodze
         const startCoords = trip.origin.lat && trip.origin.lng
             ? { lat: trip.origin.lat, lng: trip.origin.lng }
-            : await geocode(trip.origin.address);
+            : await mapService.geocode(trip.origin.address);
         const endCoords = trip.destination.lat && trip.destination.lng
             ? { lat: trip.destination.lat, lng: trip.destination.lng }
-            : await geocode(trip.destination.address);
+            : await mapService.geocode(trip.destination.address);
+
+        const roadLine = startCoords && endCoords ? await mapService.fetchRoadLine(startCoords, endCoords) : null;
+        const towns = roadLine ? await mapService.townsAlongRoad(roadLine, 10) : [];
 
         const middleCount = Math.max(0, numberOfPoints - 2);
-        const candidateCount = middleCount > 0 ? middleCount + Math.min(4, Math.ceil(middleCount / 3)) : 0;
+        const candidateCount = middleCount > 0 ? middleCount + Math.min(3, Math.ceil(middleCount / 3)) : 0;
 
-        // 1. Interpretacja Rozproszenia (Discovery Spread 0-10)
+        // 2. Interpretacja Rozproszenia (Discovery Spread 0-10)
         const maxDetourKm = 5 + Math.round(discoverySpread * 2.5);
+        const tolerance = maxDetourKm * 1.5;
+
+        // Katalog prawdziwych atrakcji z OpenStreetMap w miejscowościach po drodze
+        const catalog = roadLine && middleCount > 0 ? await collectAttractions(roadLine, towns, tolerance) : [];
+        const catalogByName = new Map(catalog.map(place => [normalizeName(place.name), place]));
+        console.log(`[Groq AI] Katalog OpenStreetMap: ${catalog.length} atrakcji przy trasie.`);
         const spreadInstruction = `Punkty pośrednie MUSZĄ leżeć przy głównej drodze z ${trip.origin.address} do ${trip.destination.address}, najdalej ${maxDetourKm} km od niej. Nie proponuj miejsc w innych kierunkach ani poza tym pasem.`;
 
-        // 2. Interpretacja Intensywności (Intensity 0-10)
+        // 3. Interpretacja Intensywności (Intensity 0-10)
         let intensityInstruction = "";
         if (intensity <= 3) {
             intensityInstruction = "Tempo bardzo spokojne, 1-2 główne atrakcje z czasem na relaks.";
@@ -156,39 +195,47 @@ exports.generateWaypoints = async (trip, user) => {
             intensityInstruction = "Tempo ekstremalne, krótkie, intensywne postoje i duża dynamika.";
         }
 
-        const roadLine = startCoords && endCoords ? await fetchRoadLine(startCoords, endCoords) : null;
-        const towns = roadLine ? await townsAlongRoad(roadLine, 10) : [];
-        const coordsInfo = towns.length > 0
+        const roadInfo = towns.length > 0
             ? `Droga samochodowa prowadzi kolejno przez: ${towns.join(', ')}. Wybieraj atrakcje w tych miejscowościach albo tuż obok nich, w tej kolejności.`
             : '';
 
+        const catalogInfo = catalog.length > 0
+            ? `
+        PRAWDZIWE ATRAKCJE Z OPENSTREETMAP (w kolejności przejazdu):
+        ${catalog.map(place => `- ${place.name} (${place.town}, ${OSM_TYPE_LABELS[place.type] || place.type})`).join('\n        ')}
+        Propozycje po drodze wybieraj PRZEDE WSZYSTKIM z tej listy, dopasowując je do zainteresowań i budżetu, a nazwę przepisuj dokładnie. Punkty mają być rozłożone równomiernie na całej trasie, najwyżej 2 z jednej miejscowości: jeśli na jakimś odcinku drogi lista nie ma nic odpowiedniego, zaproponuj tam własne, znane miejsce z miejscowości na tym odcinku.
+`
+            : '';
+
         const prompt = `Jesteś profesjonalnym przewodnikiem Voyager AI. 
-        Zaplanuj trasę z: ${trip.origin.address} do: ${trip.destination.address}. ${coordsInfo}
+        Zaplanuj trasę z: ${trip.origin.address} do: ${trip.destination.address}. ${roadInfo}
         Zwróć uwagę jakie miejscowości leżą na drodze między tymi lokalizacjami, aby na całej trasie znaleźć coś ciekawego.
-        
+        ${catalogInfo}
         PARAMETRY LOGICZNE:
         - GEOGRAFIA: ${spreadInstruction}
         - DYNAMIKA: ${intensityInstruction}
         - LICZBA PUNKTÓW: DOKŁADNIE ${candidateCount + 2} (start, ${candidateCount} propozycji po drodze, cel).
         - ZAINTERESOWANIA: ${interests}.
-        - BUDŻET: ${budget}.
+        - BUDŻET: ${budget}. Dobieraj miejsca, których koszt zwiedzania mieści się w budżecie.
+        - STYL PODRÓŻY: ${travelStyle}.
         - KONIECZNE WYTYCZNE: ${specialRequests}
 
         WYMAGANIA TECHNICZNE:
-        1. Każde miejsce MUSI istnieć w rzeczywistości.
-        2. Podaj DOKŁADNE współrzędne geograficzne (lat, lng) jako float.
+        1. Każde miejsce MUSI istnieć w rzeczywistości. W polu "name" podaj krótką, oficjalną nazwę obiektu, pod którą jest na mapie (bez dopisków i myślników).
+        2. Podaj współrzędne geograficzne (lat, lng) jako float.
         3. Odpowiedź musi być WYŁĄCZNIE obiektem JSON.
         4. Pierwszym punktem trasy ma być ${trip.origin.address}.
         5. Ostatnim punktem trasy ma być ${trip.destination.address}.
         6. Punkty ułóż w kolejności przejazdu. Każdy kolejny punkt jest bliżej celu niż poprzedni, bez cofania się.
+        7. W polu "address" podaj ulicę (jeśli ją znasz) i miejscowość.
 
         STRUKTURA JSON:
         {
           "waypoints": [
             {
               "name": "Pełna nazwa",
-              "address": "Adres, Miasto",
-              "description": "Dlaczego pasuje do profilu? Poszukaj w Internecie informacji na temat danego miejsca aby zweryfikować jego autentyczność i napisz o danym dłuższy opis konieczine około 10 zdań.",
+              "address": "Ulica, Miasto",
+              "description": "Dlaczego pasuje do profilu? Opisz miejsce w około 10 zdaniach.",
               "location": { "lat": 0.0, "lng": 0.0 },
               "order_index": 1
             }
@@ -211,9 +258,7 @@ exports.generateWaypoints = async (trip, user) => {
 
         const responseText = chatCompletion.choices[0]?.message?.content;
         const parsedData = JSON.parse(responseText);
-        const waypoints = (parsedData.waypoints || [])
-            .map(toPoint)
-            .filter(wp => !isNaN(wp.location.lat) && !isNaN(wp.location.lng));
+        const waypoints = (parsedData.waypoints || []).map(toPoint);
 
         if (waypoints.length < 2) {
             throw new Error("AI zwróciło za mało punktów");
@@ -221,31 +266,52 @@ exports.generateWaypoints = async (trip, user) => {
 
         const first = waypoints[0];
         const last = waypoints[waypoints.length - 1];
-        const start = startCoords || first.location;
-        const end = endCoords || last.location;
-        first.location = start;
-        last.location = end;
-
-        const line = roadLine || [start, end];
-        const tolerance = maxDetourKm * 1.5;
-        const candidates = waypoints.slice(1, -1)
-            .map(wp => ({ wp, ...routePosition(wp.location, line) }));
-
-        const onRoute = candidates.filter(c => c.progress > 0.02 && c.progress < 0.98 && c.offsetKm <= tolerance);
-        let chosen = pickEvenly(onRoute.sort((a, b) => a.progress - b.progress), middleCount);
-        if (chosen.length < middleCount) {
-            const extra = candidates
-                .filter(c => !chosen.includes(c))
-                .sort((a, b) => a.offsetKm - b.offsetKm)
-                .slice(0, middleCount - chosen.length);
-            chosen = [...chosen, ...extra];
+        if (startCoords) first.location = startCoords;
+        if (endCoords) last.location = endCoords;
+        if (isNaN(first.location.lat) || isNaN(last.location.lat)) {
+            throw new Error("Nie udało się ustalić położenia startu lub celu");
         }
-        chosen.sort((a, b) => a.progress - b.progress);
 
-        const result = [first, ...chosen.map(c => c.wp), last]
-            .map((wp, i) => ({ ...wp, order_index: i + 1 }));
+        // 4. Weryfikacja propozycji w OpenStreetMap: prawdziwe położenie, godziny otwarcia, strona www
+        const line = roadLine || [first.location, last.location];
+        const box = mapService.boundingBox(line, tolerance);
 
-        console.log(`[Groq AI] Sukces: ${onRoute.length} z ${waypoints.length - 2} propozycji przy trasie, zapisano ${result.length} punktów.`);
+        const middle = [];
+        for (const wp of waypoints.slice(1, -1)) {
+            const known = catalogByName.get(normalizeName(wp.name));
+            const place = known
+                ? { location: known.location, openingHours: known.openingHours, website: known.website, osmId: known.osmId }
+                : await verifyInOsm(wp, box);
+            if (place) {
+                middle.push({ ...wp, ...place, verified: true });
+            } else if (!isNaN(wp.location.lat) && !isNaN(wp.location.lng)) {
+                middle.push({ ...wp, verified: false });
+            }
+        }
+
+        // 5. Wybór punktów przy drodze, w kolejności przejazdu; zweryfikowane mają pierwszeństwo
+        const candidates = middle.map(wp => ({ wp, ...mapService.routePosition(wp.location, line) }));
+        const isOnRoute = c => c.progress > 0.02 && c.progress < 0.98 && c.offsetKm <= tolerance;
+        const byProgress = (a, b) => a.progress - b.progress;
+
+        let chosen = pickAlongRoute(candidates.filter(isOnRoute), middleCount);
+        const fillFrom = (pool) => {
+            if (chosen.length >= middleCount) return;
+            const extra = pool.filter(c => !chosen.includes(c)).slice(0, middleCount - chosen.length);
+            chosen = [...chosen, ...extra];
+        };
+        fillFrom(candidates.filter(c => isOnRoute(c)).sort(byProgress));
+        fillFrom([...candidates].sort((a, b) => a.offsetKm - b.offsetKm));
+        chosen.sort(byProgress);
+
+        const result = [
+            { ...first, verified: Boolean(startCoords) },
+            ...chosen.map(c => c.wp),
+            { ...last, verified: Boolean(endCoords) },
+        ].map((wp, i) => ({ ...wp, order_index: i + 1 }));
+
+        const verifiedCount = chosen.filter(c => c.wp.verified).length;
+        console.log(`[Groq AI] Sukces: zapisano ${result.length} punktów, ${verifiedCount} z ${chosen.length} pośrednich potwierdzonych w OpenStreetMap.`);
         return result;
 
     } catch (error) {

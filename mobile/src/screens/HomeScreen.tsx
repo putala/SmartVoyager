@@ -26,6 +26,7 @@ import {
 import api from '../api/axiosInstance';
 import { useAuthStore } from '../store/authStore';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRefreshOnForeground } from '../hooks/useRefreshOnForeground';
 import { BrandMark } from '../components/ui/BrandMark';
 import { useTheme } from '../context/ThemeContext';
 import { spacing, radius } from '../theme/tokens';
@@ -59,14 +60,14 @@ export default function HomeScreen({ navigation }: any) {
     const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
     const logout = useAuthStore((state) => state.logout);
 
-    const loadTrips = async () => {
+    const loadTrips = async (silent = false) => {
         try {
             const res = await api.get('/trips');
             const data = res.data.data || res.data || [];
             setTrips(Array.isArray(data) ? data : []);
         } catch (err: any) {
             console.error('Błąd API:', err.response?.data || err.message);
-            Alert.alert('Problem z połączeniem', 'Nie udało się pobrać wycieczek.');
+            if (!silent) Alert.alert('Problem z połączeniem', 'Nie udało się pobrać wycieczek.');
         } finally {
             setLoading(false);
         }
@@ -77,6 +78,8 @@ export default function HomeScreen({ navigation }: any) {
             loadTrips();
         }, []),
     );
+
+    useRefreshOnForeground(() => loadTrips(true));
 
     const toggleFilter = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

@@ -8,4 +8,7 @@ export const userService = {
     // Zmiana hasła
     changePassword: (data: { oldPassword: string; newPassword: string }) =>
         api.put('/users/change-password', data).then(res => res.data),
+
+    // Usunięcie własnego konta, wymaga potwierdzenia hasłem
+    deleteMyAccount: (password: string) => api.delete('/users/me', { data: { password } }),
 };

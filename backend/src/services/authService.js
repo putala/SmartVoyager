@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const generateToken = (user) => {
     return jwt.sign(
         { id: user._id, role: user.role },
-        process.env.JWT_SECRET || 'supersecretkey',
+        process.env.JWT_SECRET,
         { expiresIn: '1d' }
     );
 };
@@ -32,15 +32,10 @@ exports.registerUser = async (userData) => {
  */
 exports.authenticateUser = async (email, password) => {
     // 1. Pobieramy użytkownika wraz z zahashowanym hasłem
+    // Ten sam komunikat dla obu błędów, żeby nie zdradzać, czy konto istnieje
     const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-        throw new Error("Nie znaleziono użytkownika");
-    }
-
-    // 2. Weryfikujemy hasło (metoda z modelu User.js)
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-        throw new Error("Błędne hasło");
+    if (!user || !(await user.matchPassword(password))) {
+        throw new Error("Nieprawidłowy e-mail lub hasło");
     }
 
     // 3. Generujemy token

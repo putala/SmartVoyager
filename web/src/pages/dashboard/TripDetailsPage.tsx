@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { tripsService } from '../../api/tripsService.ts';
 import { Mapbox } from '../../components/trips/Mapbox.tsx';
 import { useUI } from '../../context/UIContext';
+import { useRefetchOnFocus } from '../../hooks/useRefetchOnFocus';
 import {
     MapPin,
     Sparkles,
@@ -13,6 +14,8 @@ import {
     AlertCircle,
     Pencil,
     ArrowLeft,
+    Clock,
+    ExternalLink,
 } from 'lucide-react';
 
 export const TripDetailsPage = () => {
@@ -39,6 +42,10 @@ export const TripDetailsPage = () => {
     }, [id]);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    useRefetchOnFocus(() => {
+        if (!isGenerating) loadData();
+    });
 
     const toggleVisited = async (e: React.MouseEvent, wp: any) => {
         e.stopPropagation();
@@ -223,6 +230,24 @@ export const TripDetailsPage = () => {
                                                 <MapPin size={11} />
                                                 {wp.address}
                                             </p>
+                                        )}
+                                        {wp.openingHours && (
+                                            <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                                                <Clock size={11} />
+                                                {wp.openingHours}
+                                            </p>
+                                        )}
+                                        {wp.website && (
+                                            <a
+                                                href={wp.website}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-xs text-muted mt-1 inline-flex items-center gap-1 hover:underline"
+                                            >
+                                                <ExternalLink size={11} />
+                                                Strona miejsca
+                                            </a>
                                         )}
                                         {wp.description && (
                                             <p className="text-xs text-muted mt-2 leading-relaxed">

@@ -24,7 +24,7 @@ export const tripsService = {
 
     // W wersji webowej endpoint to /generate a nie /generate-waypoints
     generateAIWaypoints: async (tripId: string) => {
-        const response = await api.post(`/trips/${tripId}/generate`, undefined, { timeout: 90000 });
+        const response = await api.post(`/trips/${tripId}/generate`, undefined, { timeout: 120000 });
         return response.data;
     },
 

@@ -8,7 +8,7 @@ const protect = async (req, res, next) => {
         try {
             token = req.headers.authorization.split(' ')[1];
 
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey');
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
             req.user = await User.findById(decoded.id).select('-password');
 
@@ -16,14 +16,14 @@ const protect = async (req, res, next) => {
                 return res.status(401).json({ message: 'Użytkownik już nie istnieje' });
             }
 
-            next();
+            return next();
         } catch (error) {
-            res.status(401).json({ message: 'Brak autoryzacji, błędny token' });
+            return res.status(401).json({ message: 'Brak autoryzacji, błędny token' });
         }
     }
 
     if (!token) {
-        res.status(401).json({ message: 'Brak autoryzacji, brak tokena' });
+        return res.status(401).json({ message: 'Brak autoryzacji, brak tokena' });
     }
 };
 

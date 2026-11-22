@@ -27,8 +27,6 @@ exports.login = async (req, res) => {
             ...result
         });
     } catch (err) {
-        // Obsługa statusów zależnie od typu błędu
-        const status = err.message === "Nie znaleziono użytkownika" ? 404 : 401;
-        res.status(status).json({ success: false, message: err.message });
+        res.status(401).json({ success: false, message: err.message });
     }
 };

@@ -25,4 +25,11 @@ export const userService = {
     // To wywoła Twój endpoint: PUT /api/users/change-password
     changePassword: (data: { oldPassword: string; newPassword: string }) =>
         api.put('/users/change-password', data).then(res => res.data),
+
+    // --- OCHRONA DANYCH (RODO) ---
+    // Wszystkie dane konta: profil, wycieczki i punkty trasy
+    exportMyData: () => api.get('/users/me/export').then(res => res.data),
+
+    // Usunięcie własnego konta, wymaga potwierdzenia hasłem
+    deleteMyAccount: (password: string) => api.delete('/users/me', { data: { password } }),
 };

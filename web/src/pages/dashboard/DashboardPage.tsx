@@ -5,6 +5,7 @@ import { TripCard } from '../../components/trips/TripCard';
 import { useUI } from '../../context/UIContext';
 import { Plus, Loader2, Trash2, Pencil, Heart } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useRefetchOnFocus } from '../../hooks/useRefetchOnFocus';
 
 function formatTripCount(n: number): string {
     if (n === 1) return '1 wycieczka';
@@ -29,8 +30,8 @@ export const DashboardPage: React.FC = () => {
         setShowOnlyFavorites(isFilterFromUrl);
     }, [isFilterFromUrl]);
 
-    const loadTrips = () => {
-        setLoading(true);
+    const loadTrips = (silent = false) => {
+        if (!silent) setLoading(true);
         api.get('/trips')
             .then(res => {
                 const responseContent = res.data;
@@ -47,6 +48,8 @@ export const DashboardPage: React.FC = () => {
     useEffect(() => {
         loadTrips();
     }, []);
+
+    useRefetchOnFocus(() => loadTrips(true));
 
     const handleToggleFilter = () => {
         const nextState = !showOnlyFavorites;

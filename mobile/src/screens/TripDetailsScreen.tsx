@@ -1,12 +1,13 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     StyleSheet, Text, View, ScrollView, TouchableOpacity,
-    ActivityIndicator, SafeAreaView, Alert, LayoutAnimation, Platform, UIManager,
+    ActivityIndicator, SafeAreaView, Alert, LayoutAnimation, Platform, UIManager, Linking,
 } from 'react-native';
 import MapView from 'react-native-maps';
 import {
-    Sparkles, Trash2, CheckCircle2, MapPin, Heart, Pencil,
+    Sparkles, Trash2, CheckCircle2, MapPin, Heart, Pencil, Clock, ExternalLink,
 } from 'lucide-react-native';
+import { useRefreshOnForeground } from '../hooks/useRefreshOnForeground';
 import { tripsService } from '../api/tripsService';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { TripMap } from '../components/trips/TripMap';
@@ -26,12 +27,16 @@ export default function TripDetailsScreen({ route, navigation }: any) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const mapRef = useRef<MapView>(null);
+    const hasLoaded = useRef(false);
 
     const loadData = useCallback(async () => {
         try {
             const res = await tripsService.getTripDetails(id);
             setTrip(res.data || res);
+            hasLoaded.current = true;
         } catch {
+            // A failed background refresh keeps the plan already on screen
+            if (hasLoaded.current) return;
             Alert.alert('Błąd', 'Nie udało się wczytać wycieczki.');
             navigation.goBack();
         } finally {
@@ -39,11 +44,14 @@ export default function TripDetailsScreen({ route, navigation }: any) {
         }
     }, [id, navigation]);
 
-    useEffect(() => { loadData(); }, [loadData]);
-
     useFocusEffect(
-        useCallback(() => () => stopSpeech(), []),
+        useCallback(() => {
+            loadData();
+            return () => stopSpeech();
+        }, [loadData]),
     );
+
+    useRefreshOnForeground(loadData);
 
     const toggleFavorite = async () => {
         try {
@@ -251,6 +259,25 @@ export default function TripDetailsScreen({ route, navigation }: any) {
                                                 {wp.address}
                                             </Text>
                                         </View>
+                                    ) : null}
+                                    {wp.openingHours ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                            <Clock size={11} color={colors.textMuted} />
+                                            <Text style={{ fontSize: 12, color: colors.textMuted, flex: 1 }} numberOfLines={2}>
+                                                {wp.openingHours}
+                                            </Text>
+                                        </View>
+                                    ) : null}
+                                    {wp.website ? (
+                                        <TouchableOpacity
+                                            onPress={() => Linking.openURL(wp.website)}
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}
+                                        >
+                                            <ExternalLink size={11} color={colors.textMuted} />
+                                            <Text style={{ fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' }}>
+                                                Strona miejsca
+                                            </Text>
+                                        </TouchableOpacity>
                                     ) : null}
                                     {wp.description ? (
                                         <Text

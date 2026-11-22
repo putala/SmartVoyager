@@ -1,6 +1,6 @@
 # Smart Voyager
 
-Smart Voyager to aplikacja webowa i mobilna do planowania podróży. Użytkownik podaje start, cel, budżet i zainteresowania. Serwer układa punkty trasy wzdłuż drogi samochodowej i prosi model Groq o atrakcje w miejscowościach leżących na tej drodze.
+Smart Voyager to aplikacja webowa i mobilna do planowania podróży. Użytkownik podaje start, cel, budżet i zainteresowania. Serwer pobiera z OpenStreetMap prawdziwe atrakcje leżące przy drodze samochodowej, a model Groq wybiera z nich te, które pasują do zainteresowań i budżetu. Położenie, godziny otwarcia i strony www pochodzą z OpenStreetMap. Plany są zapisywane w MongoDB, więc ta sama wycieczka jest dostępna w przeglądarce i na telefonie.
 
 ## Technologie
 
@@ -8,6 +8,7 @@ Smart Voyager to aplikacja webowa i mobilna do planowania podróży. Użytkownik
 * **Web:** React, TypeScript, Vite, Tailwind, Leaflet
 * **Mobile:** React Native, Expo SDK 54, TypeScript, Zustand, mapy systemowe, lektor (`expo-speech`)
 * **Trasa i AI:** OpenStreetMap (Nominatim, OSRM) oraz Groq (`openai/gpt-oss-120b`)
+* **Bezpieczeństwo:** helmet, express-rate-limit
 
 ## Struktura
 
@@ -25,6 +26,8 @@ MONGO_URI=mongodb+srv://...
 JWT_SECRET=...
 GROQ_API_KEY=gsk_...
 ```
+
+Bez `JWT_SECRET` serwer nie wystartuje. Opcjonalnie `CORS_ORIGIN` (adresy po przecinku, np. `http://localhost:5173`) ogranicza, z jakich stron przeglądarka może wołać API. Bez tej zmiennej API przyjmuje żądania z każdego adresu.
 
 `MONGO_URI` to connection string klastra z MongoDB Atlas. `GROQ_API_KEY` tworzy się w [console.groq.com](https://console.groq.com) w zakładce API Keys. Klucz Groq wygasa, więc po błędzie generowania trzeba sprawdzić datę w konsoli i wkleić nowy.
 
@@ -82,12 +85,30 @@ Flaga `--offline` pomija logowanie do Expo. W Expo Go zeskanuj kod QR. Wygląd a
 1. Nominatim zamienia adres startu i celu na współrzędne.
 2. OSRM zwraca przebieg drogi samochodowej.
 3. Nominatim podaje miejscowości leżące na tej drodze.
-4. Groq proponuje atrakcje w tych miejscowościach. Model to `openai/gpt-oss-120b`.
-5. Serwer zostawia propozycje blisko drogi, układa je od startu do celu i zapisuje tyle punktów, ile ustawiono na suwaku.
+4. Dla tych miejscowości serwer pobiera z OpenStreetMap atrakcje i muzea (najwyżej 3 na miejscowość, najpierw te z godzinami otwarcia) i odrzuca te, które leżą za daleko od drogi.
+5. Groq (`openai/gpt-oss-120b`) dostaje tę listę razem z zainteresowaniami, budżetem i stylem podróży z profilu i wybiera z niej miejsca. Na odcinkach bez atrakcji z listy może zaproponować własne.
+6. Każda propozycja spoza listy jest szukana w OpenStreetMap. Znaleziona dostaje prawdziwe współrzędne, godziny otwarcia i stronę www oraz znacznik `verified`.
+7. Serwer wybiera punkty równo rozłożone wzdłuż drogi, z pierwszeństwem dla potwierdzonych, układa je od startu do celu i zapisuje tyle punktów, ile ustawiono na suwaku.
 
 Suwak zasięgu eksploracji zmienia dopuszczalne zboczenie z drogi: około 5 km przy wartości 0 i około 30 km przy wartości 10. Pierwszy punkt to start, ostatni to cel. Usunięcie wycieczki kasuje też jej punkty.
 
-Generowanie trwa zwykle kilkanaście do trzydziestu sekund, bo OpenStreetMap pozwala na jedno zapytanie na sekundę. Darmowe konto Groq ma limit 8000 tokenów na minutę. Przy dużej liczbie przystanków kolejne generowanie trzeba powtórzyć po krótkiej przerwie.
+Godziny otwarcia i strona www pojawiają się przy punkcie tylko wtedy, gdy są wpisane w OpenStreetMap. Dla mniejszych obiektów często ich brakuje.
+
+Generowanie trwa zwykle 30–60 sekund, bo OpenStreetMap pozwala na jedno zapytanie na sekundę. Darmowe konto Groq ma limit 8000 tokenów na minutę. Przy dużej liczbie przystanków kolejne generowanie trzeba powtórzyć po krótkiej przerwie.
+
+## Synchronizacja
+
+Dane są tylko na serwerze, a obie aplikacje czytają je przez API. Web odświeża listę i szczegóły wycieczki po powrocie do karty przeglądarki. Aplikacja mobilna odświeża je przy wejściu na ekran i po powrocie aplikacji z tła. Zmiana zrobiona na telefonie jest więc widoczna w przeglądarce bez przeładowania strony i odwrotnie.
+
+## Bezpieczeństwo i dane użytkownika
+
+* Hasła są hashowane bcryptem, sesja to token JWT podpisany kluczem z `.env`.
+* Logowanie nie zdradza, czy konto o danym e-mailu istnieje.
+* Logowanie i rejestracja mają limit 20 prób na 15 minut z jednego adresu IP.
+* `helmet` ustawia nagłówki bezpieczeństwa HTTP. Błędy nie pokazują stosu wywołań poza `NODE_ENV=development`.
+* Pola `_id`, `user`, `trip` i znaczniki czasu nie są przyjmowane z żądań, więc nie da się przepisać cudzej wycieczki ani punktu.
+* Linki z OpenStreetMap są przepuszczane tylko jako `http`/`https`.
+* Użytkownik może pobrać wszystkie swoje dane (JSON) i usunąć konto razem z wycieczkami po podaniu hasła. Zakładka profilu w webie ma obie opcje, aplikacja mobilna usuwanie konta.
 
 ## API
 
@@ -131,6 +152,8 @@ Generowanie trwa zwykle kilkanaście do trzydziestu sekund, bo OpenStreetMap poz
 | :--- | :--- | :--- | :--- |
 | PUT | `/api/users/profile` | Edycja własnego profilu | użytkownik |
 | PUT | `/api/users/change-password` | Zmiana własnego hasła | użytkownik |
+| GET | `/api/users/me/export` | Pobranie wszystkich własnych danych (JSON) | użytkownik |
+| DELETE | `/api/users/me` | Usunięcie własnego konta; w treści `{ "password": "..." }` | użytkownik |
 | GET | `/api/users` | Lista użytkowników | admin |
 | GET | `/api/users/stats` | Liczba użytkowników i wycieczek | admin |
 | PUT | `/api/users/:id/role` | Zmiana roli | admin |

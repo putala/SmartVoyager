@@ -6,7 +6,9 @@ const {
     updateUserRole,
     getAllUsers,
     updateProfile,      // Musisz to zaimportować z kontrolera
-    changePassword      // Musisz to zaimportować z kontrolera
+    changePassword,     // Musisz to zaimportować z kontrolera
+    exportMyData,
+    deleteMyAccount
 } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
@@ -16,6 +18,8 @@ router.use(protect); // Wszyscy muszą być zalogowani
 
 router.put('/profile', updateProfile); // Edycja profilu (dostępna dla 'user')
 router.put('/change-password', changePassword); // Zmiana hasła (dostępna dla 'user')
+router.get('/me/export', exportMyData); // Pobranie wszystkich własnych danych
+router.delete('/me', deleteMyAccount); // Usunięcie własnego konta wraz z danymi
 
 // 2. Blokada - wszystko poniżej tej linii wymaga roli ADMINA
 router.use(authorize('admin'));

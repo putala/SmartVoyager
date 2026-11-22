@@ -3,7 +3,7 @@ import {
     StyleSheet, Text, View, ScrollView, TextInput,
     TouchableOpacity, ActivityIndicator, SafeAreaView, Alert,
 } from 'react-native';
-import { User, Lock, Save, ChevronRight, Sparkles, Settings } from 'lucide-react-native';
+import { User, Lock, Save, ChevronRight, Sparkles, Settings, Trash2 } from 'lucide-react-native';
 import { userService } from '../api/userService';
 import { useAuthStore } from '../store/authStore';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
@@ -11,10 +11,32 @@ import { useTheme } from '../context/ThemeContext';
 
 export default function ProfileScreen({ navigation }: any) {
     const { colors, common, spacing, radius } = useTheme();
-    const { user, setAuth } = useAuthStore();
+    const { user, setAuth, logout } = useAuthStore();
     const [info, setInfo] = useState({ username: user?.username || '', email: user?.email || '' });
     const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    const [deletePassword, setDeletePassword] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const handleDeleteAccount = () => {
+        if (!deletePassword) return Alert.alert('Błąd', 'Podaj hasło, aby potwierdzić usunięcie konta.');
+        Alert.alert('Usuń konto', 'Usunąć konto razem ze wszystkimi wycieczkami? Tej operacji nie można cofnąć.', [
+            { text: 'Anuluj', style: 'cancel' },
+            {
+                text: 'Usuń',
+                style: 'destructive',
+                onPress: async () => {
+                    setLoading(true);
+                    try {
+                        await userService.deleteMyAccount(deletePassword);
+                        logout();
+                    } catch (err: any) {
+                        Alert.alert('Błąd', err.response?.data?.message || 'Usunięcie konta nie powiodło się.');
+                        setLoading(false);
+                    }
+                },
+            },
+        ]);
+    };
 
     const handleUpdateInfo = async () => {
         if (!info.username || !info.email) return Alert.alert('Błąd', 'Wypełnij wszystkie pola.');
@@ -55,6 +77,10 @@ export default function ProfileScreen({ navigation }: any) {
         iconBox: { padding: 10, backgroundColor: colors.elevated, borderRadius: radius.md },
         linkTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
         linkSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+        dangerBtn: {
+            alignItems: 'center', justifyContent: 'center', paddingVertical: 14,
+            borderRadius: radius.md, borderWidth: 1, borderColor: colors.error,
+        },
     }), [colors, spacing, radius]);
 
     return (
@@ -122,6 +148,24 @@ export default function ProfileScreen({ navigation }: any) {
 
                     <TouchableOpacity style={common.primaryBtn} onPress={handleChangePass}>
                         <Text style={common.primaryBtnText}>Zaktualizuj hasło</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={common.card}>
+                    <View style={styles.cardHeader}>
+                        <Trash2 size={18} color={colors.error} />
+                        <Text style={common.sectionTitle}>Usuń konto</Text>
+                    </View>
+                    <Text style={[styles.linkSub, styles.inputMb]}>
+                        Konto zostanie trwale usunięte razem ze wszystkimi wycieczkami i punktami trasy.
+                    </Text>
+                    <TextInput style={[common.input, styles.inputMb]} placeholder="Hasło (potwierdzenie)" placeholderTextColor={colors.textMuted} secureTextEntry value={deletePassword} onChangeText={setDeletePassword} />
+                    <TouchableOpacity
+                        style={[styles.dangerBtn, loading && { opacity: 0.6 }]}
+                        onPress={handleDeleteAccount}
+                        disabled={loading}
+                    >
+                        <Text style={{ color: colors.error, fontWeight: '600', fontSize: 15 }}>Usuń konto</Text>
                     </TouchableOpacity>
                 </View>
 

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { userService } from '../../api/userService';
-import { User, Lock, ShieldCheck, Loader2, Save, ArrowLeft } from 'lucide-react';
+import { User, Lock, ShieldCheck, Loader2, Save, ArrowLeft, Download, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useUI } from '../../context/UIContext';
 
 export const UserProfilePage = () => {
     const navigate = useNavigate();
+    const { confirm } = useUI();
     const [user, setUser] = useState({ username: '', email: '' });
     const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
     const [loading, setLoading] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
     const [status, setStatus] = useState<{ type: 'success' | 'error' | '', msg: string }>({ type: '', msg: '' });
 
     useEffect(() => {
@@ -63,6 +66,40 @@ export const UserProfilePage = () => {
             const message = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Zmiana hasła nie powiodła się.';
             setStatus({ type: 'error', msg: message });
         } finally { setLoading(false); }
+    };
+
+    const handleExport = async () => {
+        setLoading(true);
+        try {
+            const data = await userService.exportMyData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'smart-voyager-dane.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            setStatus({ type: 'success', msg: 'Dane zostały pobrane.' });
+        } catch {
+            setStatus({ type: 'error', msg: 'Nie udało się pobrać danych.' });
+        } finally { setLoading(false); }
+    };
+
+    const handleDeleteAccount = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!(await confirm('Usunąć konto razem ze wszystkimi wycieczkami? Tej operacji nie można cofnąć.'))) return;
+        setLoading(true);
+        try {
+            await userService.deleteMyAccount(deletePassword);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('userRole');
+            navigate('/login', { replace: true });
+        } catch (err: unknown) {
+            const message = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Usunięcie konta nie powiodło się.';
+            setStatus({ type: 'error', msg: message });
+            setLoading(false);
+        }
     };
 
     return (
@@ -164,6 +201,39 @@ export const UserProfilePage = () => {
                         />
                         <button type="submit" disabled={loading} className="btn-primary w-full">
                             Zaktualizuj hasło
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div className="card p-6 md:p-8 mt-6">
+                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                    <ShieldCheck size={20} className="text-accent" /> Twoje dane
+                </h2>
+                <p className="text-sm text-muted mb-6">
+                    Możesz pobrać kopię wszystkich danych zapisanych na Twoim koncie albo trwale usunąć konto razem z wycieczkami.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <button type="button" onClick={handleExport} disabled={loading} className="btn-primary">
+                            <Download size={18} /> Pobierz moje dane (JSON)
+                        </button>
+                    </div>
+                    <form onSubmit={handleDeleteAccount} className="space-y-3">
+                        <input
+                            type="password"
+                            placeholder="Hasło (potwierdzenie usunięcia)"
+                            className="input-field"
+                            value={deletePassword}
+                            onChange={e => setDeletePassword(e.target.value)}
+                            required
+                        />
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-sm font-medium"
+                        >
+                            <Trash2 size={18} /> Usuń konto
                         </button>
                     </form>
                 </div>

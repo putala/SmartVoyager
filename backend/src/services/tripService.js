@@ -18,6 +18,16 @@ const checkOwnership = (resource, user) => {
 };
 
 /**
+ * Usuwa z danych od klienta pola, których nie wolno mu ustawiać
+ * (właściciel, identyfikatory, znaczniki czasu)
+ */
+const withoutProtectedFields = (data, extraFields = []) => {
+    const clean = { ...data };
+    ['_id', 'id', 'user', 'createdAt', 'updatedAt', '__v', ...extraFields].forEach(key => delete clean[key]);
+    return clean;
+};
+
+/**
  * Pobieranie wszystkich wycieczek konkretnego użytkownika
  */
 exports.getUserTrips = async (userId) => {
@@ -42,7 +52,7 @@ exports.getSingleTrip = async (tripId, user) => {
  * Tworzenie nowej wycieczki w bazie danych
  */
 exports.createSmartTrip = async (tripData, userId) => {
-    return await Trip.create({ ...tripData, user: userId });
+    return await Trip.create({ ...withoutProtectedFields(tripData), user: userId });
 };
 
 /**
@@ -51,7 +61,7 @@ exports.createSmartTrip = async (tripData, userId) => {
 exports.updateTripData = async (tripId, updateData, user) => {
     const trip = await Trip.findById(tripId);
     checkOwnership(trip, user);
-    return await Trip.findByIdAndUpdate(tripId, updateData, { new: true, runValidators: true });
+    return await Trip.findByIdAndUpdate(tripId, withoutProtectedFields(updateData), { new: true, runValidators: true });
 };
 
 /**
@@ -81,7 +91,7 @@ exports.getWaypointsForTrip = async (tripId, user) => {
 exports.addSingleWaypoint = async (tripId, waypointData, user) => {
     const trip = await Trip.findById(tripId);
     checkOwnership(trip, user);
-    return await Waypoint.create({ ...waypointData, trip: tripId });
+    return await Waypoint.create({ ...withoutProtectedFields(waypointData, ['trip']), trip: tripId });
 };
 
 /**
@@ -90,7 +100,7 @@ exports.addSingleWaypoint = async (tripId, waypointData, user) => {
 exports.updateWaypointData = async (waypointId, updateData, user) => {
     const waypoint = await Waypoint.findById(waypointId).populate('trip');
     checkOwnership(waypoint, user);
-    return await Waypoint.findByIdAndUpdate(waypointId, updateData, { new: true, runValidators: true });
+    return await Waypoint.findByIdAndUpdate(waypointId, withoutProtectedFields(updateData, ['trip']), { new: true, runValidators: true });
 };
 
 /**

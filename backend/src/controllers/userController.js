@@ -18,6 +18,25 @@ exports.changePassword = async (req, res) => {
     }
 };
 
+exports.exportMyData = async (req, res) => {
+    try {
+        const data = await userService.exportUserData(req.user.id);
+        res.setHeader('Content-Disposition', 'attachment; filename="smart-voyager-dane.json"');
+        res.status(200).json(data);
+    } catch (err) {
+        res.status(404).json({ success: false, message: err.message });
+    }
+};
+
+exports.deleteMyAccount = async (req, res) => {
+    try {
+        await userService.deleteOwnAccount(req.user.id, req.body?.password);
+        res.status(200).json({ success: true, message: "Konto i wszystkie dane zostały usunięte" });
+    } catch (err) {
+        res.status(403).json({ success: false, message: err.message });
+    }
+};
+
 exports.deleteUser = async (req, res) => {
     try {
         await userService.deleteUserCompletely(req.params.id);
